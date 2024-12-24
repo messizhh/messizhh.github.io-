@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}学生面板{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                选课
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('select_course') }}" id="selectCourseForm">
+                    <div class="mb-3">
+                        <label for="course_id" class="form-label">课程</label>
+                        <select class="form-control course-select" id="course_id" name="course_id" required>
+                            <option value="">请选择课程...</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">选课</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                已选课程
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table" id="selectedCoursesTable">
+                        <thead>
+                            <tr>
+                                <th>课程名称</th>
+                                <th>教师</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                成绩统计
+            </div>
+            <div class="card-body">
+                <canvas id="gradeChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                成绩查询
+            </div>
+            <div class="card-body">
+                <table class="table" id="gradesTable">
+                    <thead>
+                        <tr>
+                            <th>课程</th>
+                            <th>成绩</th>
+                            <th>类型</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for grade in grades %}
+                        <tr>
+                            <td>{{ grade[0] }}</td>
+                            <td>{{ grade[1] if grade[1] is not none else '未录入' }}</td>
+                            <td>{{ grade[2] if grade[2] is not none else '-' }}</td>
+                            <td>
+                                {% if grade[1] is not none %}
+                                    {% if grade[1]|float >= 60 %}
+                                        <span class="badge bg-success">及格</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">不及格</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary">未录入</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // 初始化DataTables
+    $('#gradesTable').DataTable({
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/zh.json'
+        }
+    });
+
+    // 初始化Select2
+    $('.course-select').select2({
+        placeholder: '请选择课程...',
+        allowClear: true,
+        ajax: {
+            url: '{{ url_for("get_available_courses") }}',
+            dataType: 'json',
+            delay: 250,
+            data: function(params) {
+                return {
+                    search: params.term,
+                    page: params.page || 1
+                };
+            },
+            processResults: function(data) {
+                return {
+                    results: data
+                };
+            },
+            cache: true
+        }
+    });
+
+    // 绘制成绩图表
+    const grades = {{ grades|tojson }};
+    const ctx = document.getElementById('gradeChart').getContext('2d');
+
+    // 过滤掉没有成绩的课程
+    const validGrades = grades.filter(g => g[1] !== null);
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: validGrades.map(g => g[0]),  // 课程名称
+            datasets: [{
+                label: '成绩',
+                data: validGrades.map(g => g[1]),  // 成绩
+                backgroundColor: validGrades.map(g => g[1] >= 60 ? 'rgba(75, 192, 192, 0.2)' : 'rgba(255, 99, 132, 0.2)'),
+                borderColor: validGrades.map(g => g[1] >= 60 ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)'),
+                borderWidth: 1
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+
+    // 加载已选课程
+    function loadSelectedCourses() {
+        $.get('{{ url_for("get_selected_courses") }}', function(data) {
+            const tbody = $('#selectedCoursesTable tbody');
+            tbody.empty();
+
+            data.forEach(course => {
+                const dropButton = course[3] ?
+                    '<span class="badge bg-secondary">已有成绩</span>' :
+                    `<form method="POST" action="{{ url_for('drop_course') }}" style="display: inline;">
+                        <input type="hidden" name="course_id" value="${course[0]}">
+                        <button type="submit" class="btn btn-danger btn-sm">退课</button>
+                    </form>`;
+
+                tbody.append(`
+                    <tr>
+                        <td>${course[1]}</td>
+                        <td>${course[2]}</td>
+                        <td>${dropButton}</td>
+                    </tr>
+                `);
+            });
+        });
+    }
+
+    // 初始加载
+    loadSelectedCourses();
+
+    // 选课表单提交
+    $('#selectCourseForm').on('submit', function(e) {
+        e.preventDefault();
+
+        $.ajax({
+            url: $(this).attr('action'),
+            method: 'POST',
+            data: $(this).serialize(),
+            success: function(response) {
+                if (response.success) {
+                    alert('选课成功！');
+                    loadSelectedCourses();
+                    $('.course-select').val(null).trigger('change');
+                } else {
+                    alert('选课失败：' + (response.error || '未知错误'));
+                }
+            },
+            error: function() {
+                alert('选课失败，请稍后重试');
+            }
+        });
+    });
+
+    // 退课表单提交
+    $(document).on('submit', 'form[action="{{ url_for("drop_course") }}"]', function(e) {
+        e.preventDefault();
+
+        if (!confirm('确定要退选这门课程吗？')) {
+            return;
+        }
+
+        $.ajax({
+            url: $(this).attr('action'),
+            method: 'POST',
+            data: $(this).serialize(),
+            success: function(response) {
+                if (response.success) {
+                    alert('退课成功！');
+                    loadSelectedCourses();
+                } else {
+                    alert('退课失败：' + (response.error || '未知错误'));
+                }
+            },
+            error: function() {
+                alert('退课失败，请稍后重试');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

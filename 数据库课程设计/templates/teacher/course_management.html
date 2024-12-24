@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}课程学生列表{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>{{ course[1] }} - 学生列表</h2>
+            <p>
+                <span class="badge badge-info">课程编号：{{ course[0] }}</span>
+                <span class="badge badge-secondary">学分：{{ course[2] }}</span>
+                <span class="badge badge-primary">课时：{{ course[3] }}</span>
+            </p>
+        </div>
+        <div class="col-md-4 text-right">
+            <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-secondary">返回</a>
+            <a href="{{ url_for('export_course_students', course_id=course[0]) }}"
+               class="btn btn-success">
+                导出名单
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <table class="table" id="studentsTable">
+                <thead>
+                    <tr>
+                        <th>学号</th>
+                        <th>姓名</th>
+                        <th>班级</th>
+                        <th>专业</th>
+                        <th>成绩</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 录入成绩模态框 -->
+<div class="modal fade" id="gradeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">录入成绩</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="gradeForm">
+                    <input type="hidden" name="course_id" value="{{ course[0] }}">
+                    <input type="hidden" name="student_id" id="studentId">
+
+                    <div class="form-group">
+                        <label>学生</label>
+                        <input type="text" class="form-control" id="studentName" readonly>
+                    </div>
+
+                    <div class="form-group">
+                        <label>成绩</label>
+                        <input type="number" class="form-control" name="score"
+                               min="0" max="100" step="0.1" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>考试类型</label>
+                        <select class="form-control" name="grade_type" required>
+                            <option value="final">期末考试</option>
+                            <option value="makeup">补考</option>
+                            <option value="resit">重修</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="submitGrade">提交</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // 初始化学生表格
+    const studentsTable = $('#studentsTable').DataTable({
+        ajax: {
+            url: '/api/teacher/courses/{{ course[0] }}/students',
+            dataSrc: 'data'
+        },
+        columns: [
+            { data: '0' },  // student_id
+            { data: '1' },  // name
+            { data: '2' },  // class_name
+            { data: '3' },  // major_name
+            {
+                data: '4',  // score
+                render: function(data) {
+                    return data ? data : '未录入';
+                }
+            },
+            {
+                data: null,
+                render: function(data, type, row) {
+                    return `
+                        <button class="btn btn-sm btn-primary input-grade"
+                                data-id="${row[0]}"
+                                data-name="${row[1]}">
+                            录入成绩
+                        </button>
+                    `;
+                }
+            }
+        ],
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/zh.json'
+        }
+    });
+
+    // 录入成绩按钮点击事件
+    $(document).on('click', '.input-grade', function() {
+        const studentId = $(this).data('id');
+        const studentName = $(this).data('name');
+
+        $('#studentId').val(studentId);
+        $('#studentName').val(studentName);
+        $('#gradeModal').modal('show');
+    });
+
+    // 提交成绩
+    $('#submitGrade').click(function() {
+        const formData = new FormData($('#gradeForm')[0]);
+
+        $.ajax({
+            url: '/api/teacher/input-grade',
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    showAlert('success', '成绩录入成功！');
+                    $('#gradeModal').modal('hide');
+                    studentsTable.ajax.reload();
+                } else {
+                    showAlert('danger', response.error || '成绩录入失败！');
+                }
+            },
+            error: function() {
+                showAlert('danger', '服务器错误！');
+            }
+        });
+    });
+});
+
+function showAlert(type, message) {
+    const alert = `
+        <div class="alert alert-${type} alert-dismissible fade show">
+            ${message}
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+        </div>
+    `;
+    $('.alerts-container').append(alert);
+}
+</script>
+{% endblock %}

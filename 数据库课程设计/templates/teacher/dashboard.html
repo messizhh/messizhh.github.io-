@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}教师面板{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>教师面板</h2>
+        </div>
+        <div class="col-md-4 text-right">
+            <a href="{{ url_for('logout') }}" class="btn btn-secondary">退出登录</a>
+        </div>
+    </div>
+
+    <div class="alerts-container"></div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">我的课程</h5>
+        </div>
+        <div class="card-body">
+            <table class="table" id="coursesTable">
+                <thead>
+                    <tr>
+                        <th>课程编号</th>
+                        <th>课程名称</th>
+                        <th>学分</th>
+                        <th>课时</th>
+                        <th>选课人数</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // 初始化课程表格
+    const coursesTable = $('#coursesTable').DataTable({
+        ajax: {
+            url: '/api/teacher/courses',
+            dataSrc: function(json) {
+                console.log('Received data:', json);  // 添加调试输出
+                return json.data || [];
+            },
+            error: function(xhr, error, thrown) {
+                console.error('DataTables error:', error, thrown);  // 添加错误输出
+                showAlert('danger', '加载课程数据失败！');
+            }
+        },
+        columns: [
+            { data: '0' },  // course_id
+            { data: '1' },  // name
+            { data: '2' },  // credits
+            { data: '3' },  // hours
+            { data: '5' },  // student_count
+            {
+                data: null,
+                render: function(data, type, row) {
+                    console.log('Row data:', row);  // 添加调试输出
+                    return `
+                        <button class="btn btn-sm btn-info view-students"
+                                data-id="${row[0]}">
+                            查看学生
+                        </button>
+                        <button class="btn btn-sm btn-primary analyze-grades"
+                                data-id="${row[0]}">
+                            成绩分析
+                        </button>
+                    `;
+                }
+            }
+        ],
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/zh.json'
+        }
+    });
+
+    // 查看学生按钮点击事件
+    $(document).on('click', '.view-students', function() {
+        const courseId = $(this).data('id');
+        window.location.href = `/teacher/courses/${courseId}/students`;
+    });
+
+    // 成绩分析按钮点击事件
+    $(document).on('click', '.analyze-grades', function() {
+        const courseId = $(this).data('id');
+        window.location.href = `/teacher/courses/${courseId}/analysis`;
+    });
+});
+
+function showAlert(type, message) {
+    const alert = `
+        <div class="alert alert-${type} alert-dismissible fade show">
+            ${message}
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+        </div>
+    `;
+    $('.alerts-container').append(alert);
+}
+</script>
+{% endblock %}

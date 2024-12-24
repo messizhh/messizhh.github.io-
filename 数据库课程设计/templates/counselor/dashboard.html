@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}辅导员面板{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>辅导员面板</h2>
+        </div>
+        <div class="col-md-4 text-right">
+            <a href="{{ url_for('logout') }}" class="btn btn-secondary">退出登录</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">管理的班级</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table" id="classesTable">
+                    <thead>
+                        <tr>
+                            <th>班级编号</th>
+                            <th>班级名称</th>
+                            <th>专业</th>
+                            <th>学生人数</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for class in classes %}
+                        <tr>
+                            <td>{{ class[0] }}</td>
+                            <td>{{ class[1] }}</td>
+                            <td>{{ class[2] }}</td>
+                            <td>{{ class[3] or 0 }}</td>
+                            <td>
+                                <a href="{{ url_for('view_class_students', class_id=class[0]) }}"
+                                   class="btn btn-primary btn-sm">查看详情</a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center">暂无管理的班级</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    $('#classesTable').DataTable({
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/zh.json'
+        }
+    });
+});
+</script>
+{% endblock %}

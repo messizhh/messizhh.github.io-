@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}班级分析{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>{{ class_info[1] }} - 成绩分析</h2>
+            <p>
+                <span class="badge badge-info">班级编号：{{ class_info[0] }}</span>
+                <span class="badge badge-secondary">年级：{{ class_info[3] }}</span>
+                <span class="badge badge-primary">专业：{{ class_info[2] }}</span>
+                <span class="badge badge-success">学生人数：{{ class_info[4] }}</span>
+            </p>
+        </div>
+        <div class="col-md-4 text-right">
+            <a href="{{ url_for('counselor_dashboard') }}" class="btn btn-secondary">返回</a>
+            <a href="{{ url_for('export_class_report', class_id=class_id) }}"
+               class="btn btn-success">导出报表</a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 基本统计信息 -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">基本统计</h5>
+                </div>
+                <div class="card-body">
+                    {% if stats %}
+                    <p><strong>总人数：</strong>{{ stats[0] }}</p>
+                    <p><strong>平均分：</strong>{{ "%.2f"|format(stats[1]) }}</p>
+                    <p><strong>及格人数：</strong>{{ stats[2] }} ({{ "%.1f"|format(stats[2] / stats[0] * 100) }}%)</p>
+                    <p><strong>总选课数：</strong>{{ stats[3] }}</p>
+                    <p><strong>总通过课程：</strong>{{ stats[4] }} ({{ "%.1f"|format(stats[4] / stats[3] * 100) }}%)</p>
+                    {% else %}
+                    <p>暂无数据</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 成绩分布图 -->
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">成绩分布</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="distributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 在成绩分布图后添加 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">成绩趋势</h5>
+        </div>
+        <div class="card-body">
+            <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+
+    <!-- 学生列表 -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">学生列表</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table" id="studentsTable">
+                    <thead>
+                        <tr>
+                            <th>学号</th>
+                            <th>姓名</th>
+                            <th>选课数</th>
+                            <th>不及格课程</th>
+                            <th>平均分</th>
+                            <th>GPA</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                        <tr class="{{ 'table-danger' if student[3] > 0 else '' }}">
+                            <td>{{ student[0] }}</td>
+                            <td>{{ student[1] }}</td>
+                            <td>{{ student[2] }}</td>
+                            <td>{{ student[3] }}</td>
+                            <td>{{ "%.2f"|format(student[4]) if student[4] else '暂无' }}</td>
+                            <td>{{ "%.2f"|format(student[4] * 4 / 100) if student[4] else '暂无' }}</td>
+                            <td>
+                                <span class="badge {% if student[5] %}bg-danger{% else %}bg-success{% endif %}">
+                                    {{ '重点关注' if student[5] else '正常' }}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn btn-info btn-sm view-courses"
+                                        data-student-id="{{ student[0] }}"
+                                        data-student-name="{{ student[1] }}">
+                                    查看课程
+                                </button>
+                                <button class="btn btn-{{ 'danger' if student[5] else 'warning' }} btn-sm toggle-risk"
+                                        data-student-id="{{ student[0] }}">
+                                    {{ '取消关注' if student[5] else '标记关注' }}
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 课程详情模态框 -->
+<div class="modal fade" id="coursesModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">课程详情</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <table class="table" id="coursesTable">
+                    <thead>
+                        <tr>
+                            <th>课程名称</th>
+                            <th>任课教师</th>
+                            <th>成绩</th>
+                            <th>考试类型</th>
+                            <th>录入时间</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // 初始化表格
+    const studentsTable = $('#studentsTable').DataTable({
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/zh.json'
+        }
+    });
+
+    // 初始化成绩分布图
+    {% if distribution %}
+    const ctx = document.getElementById('distributionChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ distribution|map(attribute=0)|list|tojson }},
+            datasets: [{
+                label: '人数',
+                data: {{ distribution|map(attribute=1)|list|tojson }},
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.5)',
+                    'rgba(54, 162, 235, 0.5)',
+                    'rgba(255, 206, 86, 0.5)',
+                    'rgba(75, 192, 192, 0.5)',
+                    'rgba(153, 102, 255, 0.5)'
+                ],
+                borderColor: [
+                    'rgba(255, 99, 132, 1)',
+                    'rgba(54, 162, 235, 1)',
+                    'rgba(255, 206, 86, 1)',
+                    'rgba(75, 192, 192, 1)',
+                    'rgba(153, 102, 255, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+
+    // 查看课程按钮点击事件
+    $('.view-courses').click(function() {
+        const studentId = $(this).data('student-id');
+        const studentName = $(this).data('student-name');
+
+        $('#coursesModal .modal-title').text(`${studentName} 的课程信息`);
+
+        const coursesTable = $('#coursesTable').DataTable({
+            destroy: true,
+            ajax: {
+                url: `/api/counselor/student/${studentId}/courses`,
+                dataSrc: 'data'
+            },
+            columns: [
+                { data: '1' },  // course_name
+                { data: '2' },  // teacher_name
+                {
+                    data: '3',  // score
+                    render: function(data) {
+                        return data ? data : '未录入';
+                    }
+                },
+                { data: '4' },  // grade_type
+                {
+                    data: '5',  // input_time
+                    render: function(data) {
+                        return data ? new Date(data).toLocaleString() : '-';
+                    }
+                }
+            ],
+            language: {
+                url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/zh.json'
+            }
+        });
+
+        $('#coursesModal').modal('show');
+    });
+
+    // 标记关注按钮点击事件
+    $('.toggle-risk').click(function() {
+        const btn = $(this);
+        const studentId = btn.data('student-id');
+
+        $.ajax({
+            url: `/api/counselor/student/${studentId}/toggle-risk`,
+            method: 'POST',
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert('操作失败：' + (response.error || '未知错误'));
+                }
+            },
+            error: function() {
+                alert('操作失败，请稍后重试');
+            }
+        });
+    });
+
+    // 绘制趋势图
+    {% if stats and stats.trend %}
+    const trendCtx = document.getElementById('trendChart').getContext('2d');
+    new Chart(trendCtx, {
+        type: 'line',
+        data: {
+            labels: {{ stats.trend.dates|tojson }},
+            datasets: [{
+                label: '班级平均分',
+                data: {{ stats.trend.averages|tojson }},
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+    {% endif %}
+});
+</script>
+{% endblock %}

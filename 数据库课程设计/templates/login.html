@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}登录{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                登录
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">用户名</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">密码</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="captcha" class="form-label">验证码</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="captcha" name="captcha" required>
+                            <div class="input-group-append">
+                                <img src="{{ url_for('get_captcha') }}" id="captchaImage"
+                                     style="height: 38px; cursor: pointer;"
+                                     title="点击刷新验证码">
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">登录</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // 点击验证码图片刷新
+    $('#captchaImage').click(function() {
+        $(this).attr('src', '{{ url_for("get_captcha") }}?' + Math.random());
+    });
+});
+</script>
+{% endblock %}
